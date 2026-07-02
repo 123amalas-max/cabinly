@@ -1,30 +1,21 @@
-import { Text, View, StyleSheet, Image } from "react-native";
-
-const EXPO_PUBLIC_BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+// Entry: redirect to tabs if signed in, else to /login.
+import { Redirect } from "expo-router";
+import { View, ActivityIndicator, StyleSheet } from "react-native";
+import { useAuth } from "@/src/auth-context";
+import { colors } from "@/src/theme";
 
 export default function Index() {
-  console.log(EXPO_PUBLIC_BACKEND_URL, "EXPO_PUBLIC_BACKEND_URL");
-
-  return (
-    <View style={styles.container}>
-      <Image
-        source={require("../assets/images/app-image.png")}
-        style={styles.image}
-      />
-    </View>
-  );
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <View style={styles.center} testID="app-loading">
+        <ActivityIndicator size="large" color={colors.brand} />
+      </View>
+    );
+  }
+  return <Redirect href={user ? "/(tabs)" : "/login"} />;
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#0c0c0c",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  image: {
-    width: "100%",
-    height: "100%",
-    resizeMode: "contain",
-  },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
 });
