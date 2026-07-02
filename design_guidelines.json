@@ -1,0 +1,193 @@
+{
+  "app_name": "Cabinly",
+  "personality": "1 iOS-Native Clean",
+  "personality_one_liner": "A trustworthy, minimal, and premium booking experience that puts content first, framed by generous spacing and a calming teal accent.",
+  "color": {
+    "surface": "#FFFFFF",
+    "onSurface": "#111827",
+    "surfaceSecondary": "#F9FAFB",
+    "onSurfaceSecondary": "#374151",
+    "surfaceTertiary": "#F3F4F6",
+    "onSurfaceTertiary": "#4B5563",
+    "surfaceInverse": "#1F2937",
+    "onSurfaceInverse": "#F9FAFB",
+    "brand": "#0D9488",
+    "brandPrimary": "#0F766E",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#14B8A6",
+    "onBrandSecondary": "#FFFFFF",
+    "brandTertiary": "#CCFBF1",
+    "onBrandTertiary": "#115E59",
+    "success": "#10B981",
+    "onSuccess": "#FFFFFF",
+    "warning": "#F59E0B",
+    "onWarning": "#FFFFFF",
+    "error": "#EF4444",
+    "onError": "#FFFFFF",
+    "info": "#0EA5E9",
+    "onInfo": "#FFFFFF",
+    "border": "#E5E7EB",
+    "borderStrong": "#D1D5DB",
+    "divider": "#F3F4F6"
+  },
+  "typography": {
+    "displayFontFamily": "Plus Jakarta Sans",
+    "textFontFamily": "Plus Jakarta Sans",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Use generous iOS-native padding. No orphan cards on the right. Content should breathe. Thumb zone must be respected for primary CTAs.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": 1,
+  "navigation": "bottom_tabs",
+  "icon_set": "Ionicons",
+  "glassmorphism": {
+    "enabled": true,
+    "do's": [
+      "Use on sticky headers over scrolling content",
+      "Use on bottom tab bar",
+      "Use for Floating Action Buttons (FAB)",
+      "Use over hero/featured cards as a frosted glass overlay paired with imagery"
+    ],
+    "dont's": [
+      "Never apply to form fields or body text regions",
+      "Do not use on regular list rows or chips",
+      "Do not overuse so the app becomes mushy"
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Home",
+      "purpose": "Discover and search for study cabins (Student) or manage listed cabins (Owner).",
+      "states": {
+        "loading": "Centered spinner with a subtle loading text.",
+        "empty": "Empty state illustration of a calendar, 'No cabins found in this city.', CTA to clear filters or add cabin.",
+        "error": "Error message with 'Retry' button."
+      },
+      "layout": "Top section: Prominent search bar with location pin icon and horizontal scrollable filter chips for cities. List view: Large full-width vertical scrolling cards featuring high-quality images on top, and text details (Title, location, star rating, price, amenities pills) below. Owner view shows 'My Cabins' list and an 'Add Cabin' FAB with glass effect."
+    },
+    {
+      "name": "Bookings",
+      "purpose": "View and manage upcoming or past bookings, displaying a digital pass for entry.",
+      "states": {
+        "loading": "Skeleton loader matching the booking cards.",
+        "empty": "Illustration of a calendar/desk, 'No upcoming bookings', CTA 'Find a Cabin'.",
+        "error": "Error message with 'Retry' button."
+      },
+      "layout": "Sticky header with a segmented control (Upcoming / Past). Cards styled like digital passes/tickets with rounded corners, a subtle divider, showing Cabin Name, Date, Time Slot, and a 'Cancel Booking' secondary action. Owner view lists bookings made for their properties."
+    },
+    {
+      "name": "Cabin Details",
+      "purpose": "Comprehensive view of a specific cabin to drive the booking decision.",
+      "states": {
+        "loading": "Skeleton loader for hero image and text blocks.",
+        "empty": "N/A - should navigate back if cabin not found.",
+        "error": "Error message with 'Go Back' button."
+      },
+      "layout": "Full-width hero image at the top with a top-to-bottom gradient scrim (transparent to 70% surfaceInverse) behind a floating back button. Below: Bold title, location, and rating. Horizontal scrollable amenities icons with labels (e.g., Wi-Fi, AC). Expandable description text. Bottom: Fixed sticky footer container (glass or solid surface) with price breakdown and a primary 'Book Now' button."
+    },
+    {
+      "name": "Booking Flow",
+      "purpose": "Select date and time slot to confirm cabin reservation.",
+      "states": {
+        "loading": "Spinner over calendar.",
+        "empty": "N/A",
+        "error": "Error message with 'Retry'."
+      },
+      "layout": "Clean visual calendar for date selection. Once date is picked, a grid of pill-shaped time slots appears. Selected slots use brandPrimary. Bottom sticky container with total price and 'Confirm Booking' CTA."
+    },
+    {
+      "name": "Profile",
+      "purpose": "Manage user identity, settings, and switch roles between Student and Owner.",
+      "states": {
+        "loading": "Spinner.",
+        "empty": "N/A",
+        "error": "N/A"
+      },
+      "layout": "Centered avatar (real image) at the top, name and email. Large, clearly grouped section for 'Role Switcher' (Toggle or distinct segmented control). Standard list rows for settings, support, and logout. List rows use 56pt height and clear chevrons."
+    },
+    {
+      "name": "Add Cabin (Owner)",
+      "purpose": "Form to list a new cabin.",
+      "states": {
+        "loading": "Spinner overlay on submit.",
+        "empty": "N/A",
+        "error": "Validation error messages below fields."
+      },
+      "layout": "Single column form. Labels above inputs. Input fields have subtle border. Image upload box with dashed border. Multi-select pills for amenities. Primary 'Publish Cabin' CTA sticky at the bottom inside KeyboardAvoidingView."
+    }
+  ],
+  "images": {
+    "hero_cabin_1": {
+      "url": "https://images.unsplash.com/photo-1777734584066-ee6ed16a0b0e",
+      "alt": "Modern library interior with multi-level bookshelves"
+    },
+    "hero_cabin_2": {
+      "url": "https://images.unsplash.com/photo-1720139290958-d8676702c3ed",
+      "alt": "An empty office with a long table and chairs"
+    },
+    "hero_cabin_3": {
+      "url": "https://images.unsplash.com/photo-1653463174308-518cff322388",
+      "alt": "Coworking desk interior"
+    },
+    "empty_calendar": {
+      "url": "https://images.unsplash.com/photo-1598471373146-c845f53b0439",
+      "alt": "Minimal calendar hanging on a wall"
+    },
+    "avatar_profile": {
+      "url": "https://images.unsplash.com/photo-1740252117013-4fb21771e7ca",
+      "alt": "Modern 3d avatar profile realistic"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Design specifically for iOS Native Clean layout: generous padding (16pt-24pt), soft rounded corners (12pt-20pt), and clean typography.",
+    "BANNED: Any use of purple, indigo, or blue (including navy). Use the strict teal (`brand`: #0D9488) palette provided.",
+    "Implement a sticky 'Book Now' / 'Confirm Booking' bottom container for screens with scrolling content. Use glassmorphism if content scrolls behind it.",
+    "Use a gradient scrim (top to bottom, transparent to 70% surfaceInverse) on the Hero Image of the Cabin Details screen to ensure back button and icons remain readable.",
+    "Ensure the role switcher in the Profile is obvious and instantly updates the view.",
+    "For the digital pass in the Bookings tab, style it like a ticket (with a subtle divider and border) rather than a flat card.",
+    "Ensure Empty States use the provided illustration and span the full screen using flex: 1.",
+    "In the Home screen, cabin cards should fill the width completely (minus padding), using high quality images and distinct pill tags for amenities."
+  ],
+  "haptics": {
+    "events": {
+      "role_switch": "impactLight",
+      "book_now_press": "impactMedium",
+      "date_time_select": "selection",
+      "tab_press": "selection",
+      "booking_confirm": "notificationSuccess",
+      "booking_cancel": "notificationWarning"
+    }
+  }
+}
