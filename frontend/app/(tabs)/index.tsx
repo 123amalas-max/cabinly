@@ -295,7 +295,11 @@ export default function HomeTab() {
         onRequestClose={() => setBoostCabin(null)}
       >
         <View style={styles.modalBackdrop}>
-          <View style={styles.sheet}>
+          <ScrollView
+            style={{ maxHeight: "90%" }}
+            contentContainerStyle={styles.sheet}
+            keyboardShouldPersistTaps="handled"
+          >
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>Boost your cabin</Text>
               <Pressable testID="close-boost-sheet" onPress={() => setBoostCabin(null)} hitSlop={12}>
@@ -348,7 +352,7 @@ export default function HomeTab() {
                 </Pressable>
               </View>
             )}
-          </View>
+          </ScrollView>
         </View>
       </Modal>
     </SafeAreaView>
