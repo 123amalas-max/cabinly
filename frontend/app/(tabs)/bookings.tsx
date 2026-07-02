@@ -29,10 +29,11 @@ type Booking = {
   cabin_name: string;
   cabin_city: string;
   cabin_image: string;
-  cabin_type: "AC" | "Non-AC";
+  cabin_type: "AC" | "Non-AC" | "Both";
   user_name: string;
   date: string;
   time_slot: string;
+  seats: string[];
   price: number;
   status: string;
   can_review: boolean;
@@ -163,6 +164,14 @@ export default function BookingsTab() {
                     <Text style={styles.detailValue}>₹{item.price.toFixed(0)}</Text>
                   </View>
                 </View>
+                {item.seats && item.seats.length > 0 && (
+                  <View style={styles.seatsRow} testID={`seats-${item.id}`}>
+                    <Ionicons name="grid" size={14} color={colors.brandPrimary} />
+                    <Text style={styles.seatsText}>
+                      Seat{item.seats.length > 1 ? "s" : ""}: {item.seats.join(", ")}
+                    </Text>
+                  </View>
+                )}
 
                 <View style={styles.footerRow}>
                   <View
@@ -328,6 +337,18 @@ const styles = StyleSheet.create({
   detailCell: { flex: 1 },
   detailLabel: { fontSize: typography.tiny, color: colors.muted, textTransform: "uppercase", fontWeight: "700" },
   detailValue: { fontSize: typography.body, color: colors.onSurface, fontWeight: "600", marginTop: 2 },
+  seatsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: spacing.md,
+    backgroundColor: colors.brandTertiary,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    alignSelf: "flex-start",
+  },
+  seatsText: { color: colors.onBrandTertiary, fontSize: typography.small, fontWeight: "700" },
   footerRow: {
     flexDirection: "row",
     alignItems: "center",

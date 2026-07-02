@@ -1,0 +1,36 @@
+{
+  "summary": "Cabinly Iteration 3 testing complete. Backend: 19/19 pytest passing in new test_iteration3_seats.py covering (a) sections auto-generated with correct grids & Non-AC=70% AC price, (b) cabin.price_per_hour = min across sections and total_seats = sum(rows*cols), (c) type filter includes Both cabins (AC filter returns AC+Both, Non-AC filter returns Non-AC+Both) with seeded types validated (Silent Study Loft=Both, Focus Cabin=AC, Reading Nook=Non-AC), (d) POST /cabins with type='Both' and no sections auto-creates 2 sections (AC 4x6 @price, Non-AC 3x6 @0.7*price) and explicit sections respected, (e) GET /cabins/{id}/availability returns empty for fresh slot then reflects booked seats after POST /bookings, (f) POST /bookings with valid seats returns price=2h*sum(section prices) and echoes seats; invalid seat -> 400 'Invalid seats for this cabin'; conflicting seat -> 409 'These seats are already booked'; missing seats -> 422, (g) DELETE /bookings frees seats (availability no longer contains them; a new booking on that seat succeeds), (h) chat auto-welcome now references seat ids, (i) GET /bookings/my returns list with seats array even for legacy docs (backfill on startup). Frontend (Expo web 390x844) end-to-end verified: signup -> home shows 'from ₹X / hour' + type-filter chips, cabin detail shows section chips 'AC · ₹X/hr', Book-now modal picks date+slot with CTA text 'Choose seats', tapping it navigates to /booking/new seat picker which renders Legend (Available/Selected/Booked), section grids with row labels and per-section price caption, sticky footer with 'N seats · 2 hours' and total ₹, Confirm button reflects selection count. Confirming creates booking, success screen appears, 'View my bookings' navigates to Bookings tab where new card shows 'Seats: AC-A1, AC-A2' inline with AC type pill + CONFIRMED status + Chat/Cancel actions. Add Cabin form has 3-option AC/Non-AC/Both segmented control (testIDs add-cabin-type-AC/Non-AC/Both). No red screens, no console errors, no deprecated Expo packages. No functional bugs found.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration3_seats.py",
+    "/app/test_reports/pytest/iteration3_results.xml"
+  ],
+  "action_items": [
+    "(Optional heads-up, unchanged from iter1/2) FastAPI @app.on_event startup/shutdown is deprecated; migrate to lifespan handler at some point.",
+    "(Optional) Old test files test_cabinly_api.py and test_iteration2_features.py were written against pre-iteration-3 schema (bookings without seats and price = price_per_hour*2). They now fail with 422 on POST /bookings and stale assertions on prices/seed types (Silent Study Loft is now 'Both'). These old files were NOT re-run in this iteration; test_iteration3_seats.py fully supersedes their coverage. Consider deleting or updating them in a follow-up."
+  ],
+  "critical_code_review_comments": [
+    "server.py: enrich_cabin re-derives sections defensively if a doc lacks them; startup backfill also writes them so subsequent reads are cheap. Good defensive code.",
+    "server.py: _cabin_seat_ids and _price_for_seats correctly key off section name prefix ('AC-' vs 'Non-AC-'), and _seat_section_name checks 'Non-AC-' first (important, since 'AC-' is a prefix of that).",
+    "server.py: create_booking dedupes seats via sorted(set(...)) before validation and price calc, preventing double-charge if client sends duplicates.",
+    "server.py: _booked_seats filters status=='confirmed', so cancelled bookings are correctly excluded from availability (verified in test_cancel_frees_seats).",
+    "booking/new.tsx: seat toggle guards against tapping booked seats (`if (booked.has(id)) return;`) and price calc mirrors backend 2h*section_price formula; confirm button disabled when selected.size==0 or during confirming — matches spec exactly.",
+    "cabin/add.tsx segmented control now includes 'Both' with icon 'swap-horizontal' and correct helper text ('AC (24 seats) + Non-AC (18 seats)') — good UX addition."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration3_seats.py (new)",
+    "/app/test_reports/pytest/iteration3_results.xml (generated)"
+  ],
+  "success_rate": {"backend": "100% (19/19 iteration-3 tests)", "frontend": "100% of new seat-picker + section chip + Choose-seats CTA + Add-Cabin Both flows exercised"},
+  "seed_data_creation": "Test-only cabins created via public POST /api/cabins under new it3 owner (prefixes TEST_BOTH_, TEST_AC_, TEST_NAC_, TEST_EXPL_, TEST_AVL_, TEST_BOOST3_). Bookings on 2027-06-06 for seat-availability tests. All isolated from seeded demo cabins.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run: `pytest /app/backend/tests/test_iteration3_seats.py -v --junitxml=/app/test_reports/pytest/iteration3_results.xml`. Uses EXPO_PUBLIC_BACKEND_URL from /app/frontend/.env. Key iteration-3 contract: POST /api/bookings REQUIRES seats: List[str] (min 1); price = 2 * sum(section.price_per_hour for each seat's section); seat ids are like 'AC-A1', 'AC-B3', 'Non-AC-A1' (row letters A..; col numbers from 1). Availability endpoint: GET /api/cabins/{id}/availability?date=YYYY-MM-DD&time_slot=... returns {cabin_id, date, time_slot, booked_seats}. cabin.type is now Literal['AC','Non-AC','Both']. Legacy older test files (test_cabinly_api.py, test_iteration2_features.py) have stale booking bodies (no seats field) and old type expectations — they will fail on this schema and should be replaced or updated. Frontend seat picker path: /booking/new?cabinId=...&date=...&slot=...; seat testIDs `seat-<sectionName>-<rowLetter><colNum>` e.g. `seat-AC-A1`.",
+  "rca_of_issue": "N/A — no bugs found. All iteration-3 features (sections, seats on bookings, availability endpoint, seat-picker UI, Choose-seats CTA, 3-option cabin type in Add form, backfill of legacy bookings/cabins) function per spec."
+}

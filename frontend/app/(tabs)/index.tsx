@@ -32,10 +32,12 @@ type Cabin = {
   description: string;
   image_url: string;
   rating: number;
-  type: "AC" | "Non-AC";
+  type: "AC" | "Non-AC" | "Both";
   avg_rating: number;
   review_count: number;
   is_featured: boolean;
+  total_seats: number;
+  sections: { name: string; rows: number; cols: number; price_per_hour: number }[];
 };
 
 const CABIN_TYPES: Array<"All" | "AC" | "Non-AC"> = ["All", "AC", "Non-AC"];
@@ -228,7 +230,7 @@ export default function HomeTab() {
                 )}
                 <View style={styles.typeBadge}>
                   <Ionicons
-                    name={item.type === "AC" ? "snow" : "leaf"}
+                    name={item.type === "AC" ? "snow" : item.type === "Non-AC" ? "leaf" : "swap-horizontal"}
                     size={12}
                     color={colors.onSurface}
                   />
@@ -261,6 +263,7 @@ export default function HomeTab() {
                 </View>
                 <View style={styles.footerRow}>
                   <View style={{ flexDirection: "row", alignItems: "baseline" }}>
+                    <Text style={styles.priceFrom}>from </Text>
                     <Text style={styles.price}>₹{item.price_per_hour.toFixed(0)}</Text>
                     <Text style={styles.priceUnit}> / hour</Text>
                   </View>
@@ -496,6 +499,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   price: { fontSize: typography.h3, fontWeight: "700", color: colors.brandPrimary },
+  priceFrom: { fontSize: typography.tiny, color: colors.muted, fontWeight: "700", textTransform: "uppercase" },
   priceUnit: { fontSize: typography.small, color: colors.onSurfaceSecondary },
   boostBtn: {
     flexDirection: "row",

@@ -46,7 +46,7 @@ export default function AddCabin() {
   const [description, setDescription] = useState("");
   const [image, setImage] = useState(DEFAULT_IMAGES[0]);
   const [amenities, setAmenities] = useState<string[]>([]);
-  const [type, setType] = useState<"AC" | "Non-AC">("AC");
+  const [type, setType] = useState<"AC" | "Non-AC" | "Both">("AC");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -154,8 +154,9 @@ export default function AddCabin() {
 
           <Field label="Cabin type">
             <View style={styles.typeRow}>
-              {(["AC", "Non-AC"] as const).map((t) => {
+              {(["AC", "Non-AC", "Both"] as const).map((t) => {
                 const active = t === type;
+                const iconName = t === "AC" ? "snow" : t === "Non-AC" ? "leaf" : "swap-horizontal";
                 return (
                   <Pressable
                     key={t}
@@ -164,8 +165,8 @@ export default function AddCabin() {
                     style={[styles.typeOpt, active && styles.typeOptActive]}
                   >
                     <Ionicons
-                      name={t === "AC" ? "snow" : "leaf"}
-                      size={18}
+                      name={iconName as any}
+                      size={16}
                       color={active ? colors.onBrandPrimary : colors.onSurfaceSecondary}
                     />
                     <Text style={[styles.typeOptText, active && styles.typeOptTextActive]}>
@@ -175,6 +176,11 @@ export default function AddCabin() {
                 );
               })}
             </View>
+            <Text style={styles.typeHelper}>
+              {`We'll auto-lay out ${
+                type === "Both" ? "AC (24 seats) + Non-AC (18 seats)" : type === "AC" ? "24 AC seats" : "18 Non-AC seats"
+              } for you. Non-AC is priced at 70% of the AC price.`}
+            </Text>
           </Field>
 
           <Field label="Cover image">
@@ -313,6 +319,12 @@ const styles = StyleSheet.create({
   typeOptActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
   typeOptText: { color: colors.onSurfaceSecondary, fontWeight: "700" },
   typeOptTextActive: { color: colors.onBrandPrimary },
+  typeHelper: {
+    marginTop: spacing.sm,
+    fontSize: typography.tiny,
+    color: colors.muted,
+    lineHeight: 16,
+  },
   imageOpt: {
     flex: 1,
     height: 80,

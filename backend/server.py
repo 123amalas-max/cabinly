@@ -1,8 +1,9 @@
 """
 Cabinly Backend – Reading Room & Study Cabin Booking App.
 FastAPI + MongoDB + JWT auth (email/password with bcrypt).
-Features: cabins (with AC / Non-AC type, "featured" boost), bookings, reviews,
-per-booking chat threads. Mock UPI flow for featured listings.
+Features: cabins with AC / Non-AC sections + per-seat availability
+(BookMyShow-style), bookings, reviews, per-booking chat threads,
+mock UPI featured boost.
 All routes are prefixed with /api.
 """
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, status
@@ -12,7 +13,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from passlib.context import CryptContext
 from jose import jwt, JWTError
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator
 from typing import List, Optional, Literal
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -51,7 +52,13 @@ app = FastAPI(title="Cabinly API")
 api = APIRouter(prefix="/api")
 
 Role = Literal["student", "owner"]
-CabinType = Literal["AC", "Non-AC"]
+CabinType = Literal["AC", "Non-AC", "Both"]
+SectionName = Literal["AC", "Non-AC"]
+
+# Default seat grid sizes for auto-generated sections.
+DEFAULT_AC_ROWS, DEFAULT_AC_COLS = 4, 6           # 24 seats
+DEFAULT_NON_AC_ROWS, DEFAULT_NON_AC_COLS = 3, 6   # 18 seats
+NON_AC_PRICE_RATIO = 0.7                          # Non-AC = 70% of base
 
 # ---------------------------------------------------------------------------
 # Pydantic models
@@ -85,6 +92,13 @@ class TokenOut(BaseModel):
     user: UserOut
 
 
+class SectionSpec(BaseModel):
+    name: SectionName
+    rows: int = Field(ge=1, le=12)
+    cols: int = Field(ge=1, le=12)
+    price_per_hour: float = Field(ge=0)
+
+
 class CabinIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     city: str = Field(min_length=1, max_length=80)
@@ -94,16 +108,50 @@ class CabinIn(BaseModel):
     description: str = Field(default="", max_length=1000)
     image_url: str = Field(default="")
     type: CabinType = "AC"
+    sections: Optional[List[SectionSpec]] = None
+
+    @model_validator(mode="after")
+    def _fill_sections(self) -> "CabinIn":
+        if self.sections and len(self.sections) > 0:
+            return self
+        # Derive from type + price_per_hour
+        secs: List[SectionSpec] = []
+        if self.type in ("AC", "Both"):
+            secs.append(SectionSpec(
+                name="AC",
+                rows=DEFAULT_AC_ROWS,
+                cols=DEFAULT_AC_COLS,
+                price_per_hour=float(self.price_per_hour),
+            ))
+        if self.type in ("Non-AC", "Both"):
+            secs.append(SectionSpec(
+                name="Non-AC",
+                rows=DEFAULT_NON_AC_ROWS,
+                cols=DEFAULT_NON_AC_COLS,
+                price_per_hour=round(float(self.price_per_hour) * NON_AC_PRICE_RATIO, 2),
+            ))
+        self.sections = secs
+        return self
 
 
-class CabinOut(CabinIn):
+class CabinOut(BaseModel):
     id: str
     owner_id: str
+    name: str
+    city: str
+    address: str
+    price_per_hour: float  # min across sections, for display
+    amenities: List[str]
+    description: str
+    image_url: str
+    type: CabinType
+    sections: List[SectionSpec]
     rating: float = 4.7
     avg_rating: float = 0.0
     review_count: int = 0
     featured_until: Optional[datetime] = None
     is_featured: bool = False
+    total_seats: int = 0
     created_at: datetime
 
 
@@ -111,6 +159,7 @@ class BookingIn(BaseModel):
     cabin_id: str
     date: str  # YYYY-MM-DD
     time_slot: str  # e.g. "10:00 AM - 12:00 PM"
+    seats: List[str] = Field(min_length=1, max_length=20)
 
 
 class BookingOut(BaseModel):
@@ -125,11 +174,19 @@ class BookingOut(BaseModel):
     owner_id: str
     date: str
     time_slot: str
+    seats: List[str]
     price: float
     status: str
     can_review: bool
     has_review: bool
     created_at: datetime
+
+
+class AvailabilityOut(BaseModel):
+    cabin_id: str
+    date: str
+    time_slot: str
+    booked_seats: List[str]
 
 
 class ReviewIn(BaseModel):
@@ -160,6 +217,11 @@ class MessageOut(BaseModel):
     sender_role: Role
     text: str
     created_at: datetime
+
+
+class FeatureMockPayIn(BaseModel):
+    upi_id: Optional[str] = None
+    days: int = Field(default=7, ge=1, le=30)
 
 
 # ---------------------------------------------------------------------------
@@ -224,7 +286,6 @@ def _cabin_is_featured(c: dict) -> bool:
 
 
 async def _cabin_stats(cabin_id: str) -> tuple[float, int]:
-    """Compute (avg_rating, review_count) for a cabin."""
     pipeline = [
         {"$match": {"cabin_id": cabin_id}},
         {"$group": {"_id": None, "avg": {"$avg": "$rating"}, "count": {"$sum": 1}}},
@@ -235,15 +296,99 @@ async def _cabin_stats(cabin_id: str) -> tuple[float, int]:
     return (round(float(docs[0]["avg"] or 0), 2), int(docs[0]["count"]))
 
 
+def _default_sections_for(cabin_type: str, base_price: float) -> List[dict]:
+    secs: List[dict] = []
+    if cabin_type in ("AC", "Both"):
+        secs.append({"name": "AC", "rows": DEFAULT_AC_ROWS, "cols": DEFAULT_AC_COLS, "price_per_hour": float(base_price)})
+    if cabin_type in ("Non-AC", "Both"):
+        secs.append({
+            "name": "Non-AC",
+            "rows": DEFAULT_NON_AC_ROWS,
+            "cols": DEFAULT_NON_AC_COLS,
+            "price_per_hour": round(float(base_price) * NON_AC_PRICE_RATIO, 2),
+        })
+    if not secs:
+        # ultimate fallback
+        secs.append({"name": "AC", "rows": DEFAULT_AC_ROWS, "cols": DEFAULT_AC_COLS, "price_per_hour": float(base_price)})
+    return secs
+
+
+def _cabin_total_seats(sections: List[dict]) -> int:
+    return sum(int(s["rows"]) * int(s["cols"]) for s in (sections or []))
+
+
+def _cabin_min_price(sections: List[dict], fallback: float = 0.0) -> float:
+    if not sections:
+        return float(fallback)
+    return float(min(s["price_per_hour"] for s in sections))
+
+
+def _cabin_seat_ids(sections: List[dict]) -> set[str]:
+    """Return the set of all valid seat ids for a cabin, e.g. {'AC-A1', ...}."""
+    ids: set[str] = set()
+    for s in sections or []:
+        for r in range(int(s["rows"])):
+            row_letter = chr(ord("A") + r)
+            for c in range(1, int(s["cols"]) + 1):
+                ids.add(f"{s['name']}-{row_letter}{c}")
+    return ids
+
+
+def _seat_section_name(seat_id: str) -> Optional[str]:
+    # "AC-A1" -> "AC" ; "Non-AC-B3" -> "Non-AC"
+    if seat_id.startswith("Non-AC-"):
+        return "Non-AC"
+    if seat_id.startswith("AC-"):
+        return "AC"
+    return None
+
+
+def _price_for_seats(sections: List[dict], seats: List[str], hours: float = 2.0) -> float:
+    price_map = {s["name"]: float(s["price_per_hour"]) for s in (sections or [])}
+    total = 0.0
+    for seat in seats:
+        sn = _seat_section_name(seat)
+        if sn and sn in price_map:
+            total += price_map[sn] * hours
+    return round(total, 2)
+
+
+async def _booked_seats(cabin_id: str, date: str, time_slot: str) -> List[str]:
+    docs = await db.bookings.find(
+        {"cabin_id": cabin_id, "date": date, "time_slot": time_slot, "status": "confirmed"},
+        {"_id": 0, "seats": 1},
+    ).to_list(1000)
+    booked: list[str] = []
+    for d in docs:
+        booked.extend(d.get("seats", []) or [])
+    return booked
+
+
 async def enrich_cabin(c: dict) -> CabinOut:
     avg, count = await _cabin_stats(c["id"])
-    payload = {**c}
-    payload.setdefault("type", "AC")
-    payload.setdefault("rating", 4.7)
-    payload["avg_rating"] = avg
-    payload["review_count"] = count
-    payload["is_featured"] = _cabin_is_featured(c)
-    return CabinOut(**payload)
+    sections = c.get("sections") or _default_sections_for(c.get("type", "AC"), c.get("price_per_hour", 0.0))
+    total_seats = _cabin_total_seats(sections)
+    min_price = _cabin_min_price(sections, c.get("price_per_hour", 0.0))
+    return CabinOut(
+        id=c["id"],
+        owner_id=c["owner_id"],
+        name=c["name"],
+        city=c["city"],
+        address=c["address"],
+        price_per_hour=min_price,
+        amenities=c.get("amenities", []),
+        description=c.get("description", ""),
+        image_url=c.get("image_url", ""),
+        type=c.get("type", "AC"),
+        sections=[SectionSpec(**s) for s in sections],
+        rating=c.get("rating", 4.7),
+        avg_rating=avg,
+        review_count=count,
+        featured_until=c.get("featured_until"),
+        is_featured=_cabin_is_featured(c),
+        total_seats=total_seats,
+        created_at=c.get("created_at", _now()),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -302,7 +447,12 @@ async def list_cabins(
     if city and city.lower() != "all":
         query["city"] = {"$regex": f"^{city}$", "$options": "i"}
     if type and type.lower() != "all":
-        query["type"] = {"$regex": f"^{type}$", "$options": "i"}
+        # "AC" filter → cabins that have AC section (type = AC or Both).
+        # Same for Non-AC.
+        if type.lower() == "ac":
+            query["type"] = {"$in": ["AC", "Both"]}
+        elif type.lower() == "non-ac":
+            query["type"] = {"$in": ["Non-AC", "Both"]}
     if q:
         query["$or"] = [
             {"name": {"$regex": q, "$options": "i"}},
@@ -310,7 +460,6 @@ async def list_cabins(
             {"description": {"$regex": q, "$options": "i"}},
         ]
     docs = await db.cabins.find(query, {"_id": 0}).to_list(500)
-    # Sort featured first, then newest
     now = _now()
 
     def sort_key(c: dict):
@@ -342,26 +491,44 @@ async def get_cabin(cabin_id: str):
     return await enrich_cabin(doc)
 
 
+@api.get("/cabins/{cabin_id}/availability", response_model=AvailabilityOut)
+async def cabin_availability(cabin_id: str, date: str, time_slot: str):
+    doc = await db.cabins.find_one({"id": cabin_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Cabin not found")
+    booked = await _booked_seats(cabin_id, date, time_slot)
+    return AvailabilityOut(
+        cabin_id=cabin_id,
+        date=date,
+        time_slot=time_slot,
+        booked_seats=sorted(set(booked)),
+    )
+
+
 @api.post("/cabins", response_model=CabinOut)
 async def create_cabin(body: CabinIn, current=Depends(get_current_user)):
     if current["role"] != "owner":
         raise HTTPException(status_code=403, detail="Only owners can add cabins")
+    sections = [s.model_dump() for s in (body.sections or [])]
     cabin = {
         "id": str(uuid.uuid4()),
         "owner_id": current["id"],
         "rating": 4.7,
         "featured_until": None,
         "created_at": _now(),
-        **body.model_dump(),
+        "name": body.name,
+        "city": body.city,
+        "address": body.address,
+        "price_per_hour": body.price_per_hour,
+        "amenities": body.amenities,
+        "description": body.description,
+        "image_url": body.image_url,
+        "type": body.type,
+        "sections": sections,
     }
     await db.cabins.insert_one(cabin)
     cabin.pop("_id", None)
     return await enrich_cabin(cabin)
-
-
-class FeatureMockPayIn(BaseModel):
-    upi_id: Optional[str] = None
-    days: int = Field(default=7, ge=1, le=30)
 
 
 @api.post("/cabins/{cabin_id}/feature/mock-pay", response_model=CabinOut)
@@ -375,7 +542,6 @@ async def feature_mock_pay(cabin_id: str, body: FeatureMockPayIn, current=Depend
     until = _now() + timedelta(days=body.days)
     await db.cabins.update_one({"id": cabin_id}, {"$set": {"featured_until": until}})
     cabin["featured_until"] = until
-    # Record a mock payment log
     await db.payments.insert_one({
         "id": str(uuid.uuid4()),
         "cabin_id": cabin_id,
@@ -396,7 +562,6 @@ async def feature_mock_pay(cabin_id: str, body: FeatureMockPayIn, current=Depend
 async def build_booking_out(b: dict) -> BookingOut:
     cabin = await db.cabins.find_one({"id": b["cabin_id"]}, {"_id": 0}) or {}
     user = await db.users.find_one({"id": b["user_id"]}, {"_id": 0}) or {}
-    # Determine review eligibility
     booking_date = b["date"]
     is_past = False
     try:
@@ -417,6 +582,7 @@ async def build_booking_out(b: dict) -> BookingOut:
         owner_id=cabin.get("owner_id", ""),
         date=b["date"],
         time_slot=b["time_slot"],
+        seats=b.get("seats", []) or [],
         price=b.get("price", 0.0),
         status=b.get("status", "confirmed"),
         can_review=(is_past and b.get("status") == "confirmed" and existing_review is None),
@@ -430,30 +596,44 @@ async def create_booking(body: BookingIn, current=Depends(get_current_user)):
     cabin = await db.cabins.find_one({"id": body.cabin_id}, {"_id": 0})
     if not cabin:
         raise HTTPException(status_code=404, detail="Cabin not found")
+    sections = cabin.get("sections") or _default_sections_for(cabin.get("type", "AC"), cabin.get("price_per_hour", 0.0))
+    valid_seats = _cabin_seat_ids(sections)
+
+    seats_dedup = sorted(set(body.seats))
+    invalid = [s for s in seats_dedup if s not in valid_seats]
+    if invalid:
+        raise HTTPException(status_code=400, detail=f"Invalid seats for this cabin: {invalid}")
+
+    already_booked = set(await _booked_seats(body.cabin_id, body.date, body.time_slot))
+    conflicts = [s for s in seats_dedup if s in already_booked]
+    if conflicts:
+        raise HTTPException(status_code=409, detail=f"These seats are already booked: {conflicts}")
+
+    price = _price_for_seats(sections, seats_dedup, hours=2.0)
     booking = {
         "id": str(uuid.uuid4()),
         "cabin_id": body.cabin_id,
         "user_id": current["id"],
         "date": body.date,
         "time_slot": body.time_slot,
-        "price": float(cabin.get("price_per_hour", 0)) * 2,  # 2-hour slot
+        "seats": seats_dedup,
+        "price": price,
         "status": "confirmed",
         "created_at": _now(),
     }
     await db.bookings.insert_one(booking)
-    # Auto-post a welcome message from the owner
+    # Owner welcome message on the chat thread
     owner_id = cabin.get("owner_id")
     if owner_id:
-        owner = await db.users.find_one({"id": owner_id}, {"_id": 0})
-        if owner:
-            await db.messages.insert_one({
-                "id": str(uuid.uuid4()),
-                "booking_id": booking["id"],
-                "sender_id": owner_id,
-                "sender_role": "owner",
-                "text": f"Hi! Your booking at {cabin.get('name')} on {booking['date']} ({booking['time_slot']}) is confirmed. Let me know if you need anything!",
-                "created_at": _now(),
-            })
+        seat_list = ", ".join(seats_dedup)
+        await db.messages.insert_one({
+            "id": str(uuid.uuid4()),
+            "booking_id": booking["id"],
+            "sender_id": owner_id,
+            "sender_role": "owner",
+            "text": f"Hi! Your booking at {cabin.get('name')} on {booking['date']} ({booking['time_slot']}) for seat(s) {seat_list} is confirmed. Let me know if you need anything!",
+            "created_at": _now(),
+        })
     return await build_booking_out(booking)
 
 
@@ -547,7 +727,6 @@ async def _ensure_thread_participant(booking_id: str, current: dict) -> tuple[di
 async def list_messages(booking_id: str, current=Depends(get_current_user)):
     await _ensure_thread_participant(booking_id, current)
     docs = await db.messages.find({"booking_id": booking_id}, {"_id": 0}).sort("created_at", 1).to_list(1000)
-    # attach sender names
     out: list[MessageOut] = []
     for d in docs:
         sender = await db.users.find_one({"id": d["sender_id"]}, {"_id": 0}) or {}
@@ -565,7 +744,7 @@ async def list_messages(booking_id: str, current=Depends(get_current_user)):
 
 @api.post("/bookings/{booking_id}/messages", response_model=MessageOut)
 async def send_message(booking_id: str, body: MessageIn, current=Depends(get_current_user)):
-    b, cabin = await _ensure_thread_participant(booking_id, current)
+    _b, cabin = await _ensure_thread_participant(booking_id, current)
     sender_role: Role = "owner" if cabin.get("owner_id") == current["id"] else "student"
     msg = {
         "id": str(uuid.uuid4()),
@@ -596,7 +775,7 @@ SEED_CABINS = [
         "city": "Bengaluru",
         "address": "MG Road, Bengaluru",
         "price_per_hour": 120.0,
-        "type": "AC",
+        "type": "Both",
         "amenities": ["Wi-Fi", "AC", "Coffee", "Power Outlets"],
         "description": "A quiet loft with individual cabins, warm lighting and unlimited coffee. Perfect for deep focus.",
         "image_url": "https://images.unsplash.com/photo-1777734584066-ee6ed16a0b0e",
@@ -626,7 +805,7 @@ SEED_CABINS = [
         "city": "Mumbai",
         "address": "Bandra West, Mumbai",
         "price_per_hour": 180.0,
-        "type": "AC",
+        "type": "Both",
         "amenities": ["Wi-Fi", "AC", "Coffee", "24x7"],
         "description": "Round the clock quiet study hall with lockers, coffee and city view seating.",
         "image_url": "https://images.unsplash.com/photo-1777734584066-ee6ed16a0b0e",
@@ -646,7 +825,7 @@ SEED_CABINS = [
         "city": "Delhi",
         "address": "Connaught Place, New Delhi",
         "price_per_hour": 140.0,
-        "type": "AC",
+        "type": "Both",
         "amenities": ["Wi-Fi", "AC", "Locker", "Coffee"],
         "description": "Central location with fast Wi-Fi and lockers for your bags and books.",
         "image_url": "https://images.unsplash.com/photo-1653463174308-518cff322388",
@@ -686,7 +865,7 @@ SEED_CABINS = [
         "city": "Chennai",
         "address": "T. Nagar, Chennai",
         "price_per_hour": 105.0,
-        "type": "AC",
+        "type": "Both",
         "amenities": ["Wi-Fi", "AC", "Silent Zone"],
         "description": "Bright, airy study bays with individual desks and adjustable chairs.",
         "image_url": "https://images.unsplash.com/photo-1777734584066-ee6ed16a0b0e",
@@ -715,20 +894,23 @@ async def startup_seed():
                 "rating": 4.7,
                 "featured_until": None,
                 "created_at": _now(),
+                "sections": _default_sections_for(c["type"], c["price_per_hour"]),
                 **c,
             }
             await db.cabins.insert_one(doc)
         logger.info("Seeded %d cabins.", len(SEED_CABINS))
     else:
-        # Backfill legacy cabin docs. If a seeded cabin matches by name, use the
-        # correct type from SEED_CABINS; otherwise default to "AC".
+        # Backfill legacy cabin docs: correct type by name for seeds, then
+        # ensure every cabin has a sensible sections layout.
         seed_type_by_name = {c["name"]: c["type"] for c in SEED_CABINS}
         for name, correct_type in seed_type_by_name.items():
-            await db.cabins.update_many(
-                {"name": name},
-                {"$set": {"type": correct_type}},
-            )
-        await db.cabins.update_many({"type": {"$exists": False}}, {"$set": {"type": "AC"}})
+            await db.cabins.update_many({"name": name}, {"$set": {"type": correct_type}})
+        async for doc in db.cabins.find({}, {"_id": 0}):
+            if not doc.get("sections"):
+                sections = _default_sections_for(doc.get("type", "AC"), doc.get("price_per_hour", 0.0))
+                await db.cabins.update_one({"id": doc["id"]}, {"$set": {"sections": sections}})
+        # Backfill missing seats field on bookings so old bookings don't crash schema
+        await db.bookings.update_many({"seats": {"$exists": False}}, {"$set": {"seats": []}})
 
 
 @app.on_event("shutdown")
