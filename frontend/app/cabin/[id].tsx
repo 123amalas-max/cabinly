@@ -27,6 +27,18 @@ type Cabin = {
   description: string;
   image_url: string;
   rating: number;
+  type: "AC" | "Non-AC";
+  avg_rating: number;
+  review_count: number;
+  is_featured: boolean;
+};
+
+type Review = {
+  id: string;
+  user_name: string;
+  rating: number;
+  text: string;
+  created_at: string;
 };
 
 const TIME_SLOTS = [
@@ -60,6 +72,7 @@ function labelDay(d: Date) {
 export default function CabinDetails() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [cabin, setCabin] = useState<Cabin | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [showBook, setShowBook] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string>("");
@@ -74,6 +87,8 @@ export default function CabinDetails() {
       try {
         const c = await api<Cabin>(`/cabins/${id}`);
         setCabin(c);
+        const rs = await api<Review[]>(`/cabins/${id}/reviews`);
+        setReviews(rs);
       } catch {
         setCabin(null);
       } finally {
@@ -151,8 +166,29 @@ export default function CabinDetails() {
             <Text style={styles.title}>{cabin.name}</Text>
             <View style={styles.ratingPill}>
               <Ionicons name="star" size={12} color={colors.warning} />
-              <Text style={styles.ratingText}>{cabin.rating.toFixed(1)}</Text>
+              <Text style={styles.ratingText}>
+                {cabin.review_count > 0 ? cabin.avg_rating.toFixed(1) : cabin.rating.toFixed(1)}
+              </Text>
+              {cabin.review_count > 0 && (
+                <Text style={styles.ratingCount}> ({cabin.review_count})</Text>
+              )}
             </View>
+          </View>
+          <View style={styles.chipInline}>
+            <View style={styles.typeInline}>
+              <Ionicons
+                name={cabin.type === "AC" ? "snow" : "leaf"}
+                size={12}
+                color={colors.onSurface}
+              />
+              <Text style={styles.typeInlineText}>{cabin.type}</Text>
+            </View>
+            {cabin.is_featured && (
+              <View style={styles.featuredInline}>
+                <Ionicons name="sparkles" size={12} color={colors.onBrandPrimary} />
+                <Text style={styles.featuredInlineText}>Featured</Text>
+              </View>
+            )}
           </View>
           <View style={styles.metaRow}>
             <Ionicons name="location" size={16} color={colors.muted} />
@@ -173,6 +209,36 @@ export default function CabinDetails() {
 
           <Text style={styles.sectionTitle}>About this space</Text>
           <Text style={styles.description}>{cabin.description}</Text>
+
+          <Text style={styles.sectionTitle}>Reviews ({reviews.length})</Text>
+          {reviews.length === 0 ? (
+            <Text style={styles.emptyReviews} testID="reviews-empty">
+              No reviews yet. Be the first to review after your visit!
+            </Text>
+          ) : (
+            <View style={{ marginTop: spacing.sm }}>
+              {reviews.slice(0, 5).map((r) => (
+                <View key={r.id} style={styles.reviewCard} testID={`review-${r.id}`}>
+                  <View style={styles.reviewHead}>
+                    <Text style={styles.reviewName}>{r.user_name}</Text>
+                    <View style={styles.reviewStars}>
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <Ionicons
+                          key={n}
+                          name={n <= r.rating ? "star" : "star-outline"}
+                          size={12}
+                          color={colors.warning}
+                        />
+                      ))}
+                    </View>
+                  </View>
+                  {r.text ? (
+                    <Text style={styles.reviewText}>{r.text}</Text>
+                  ) : null}
+                </View>
+              ))}
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -321,6 +387,50 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   ratingText: { color: colors.onBrandTertiary, fontSize: typography.small, fontWeight: "700" },
+  ratingCount: { color: colors.onBrandTertiary, fontSize: typography.tiny },
+  chipInline: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm },
+  typeInline: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: colors.surfaceTertiary,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
+  },
+  typeInlineText: { color: colors.onSurface, fontSize: typography.tiny, fontWeight: "700" },
+  featuredInline: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: colors.brandPrimary,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
+  },
+  featuredInlineText: { color: colors.onBrandPrimary, fontSize: typography.tiny, fontWeight: "700" },
+  emptyReviews: {
+    marginTop: spacing.sm,
+    color: colors.muted,
+    fontSize: typography.small,
+    fontStyle: "italic",
+  },
+  reviewCard: {
+    padding: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSecondary,
+    marginBottom: spacing.sm,
+  },
+  reviewHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  reviewName: { fontSize: typography.small, fontWeight: "700", color: colors.onSurface },
+  reviewStars: { flexDirection: "row", gap: 2 },
+  reviewText: { marginTop: 4, color: colors.onSurfaceSecondary, fontSize: typography.small, lineHeight: 20 },
   metaRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
   metaText: { color: colors.onSurfaceSecondary, fontSize: typography.small },
   sectionTitle: {

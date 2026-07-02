@@ -1,0 +1,39 @@
+{
+  "summary": "Cabinly Iteration 2 testing complete. Backend: 34/34 pytest passing (20 regression + 14 new for AC/Non-AC type, mock UPI boost, reviews with past-date guard, chat threads with auto-welcome, participant-only 403s, cabin_type/owner_id/can_review/has_review on GET /bookings/{id}). Frontend (Expo web 390x844) verified end-to-end: student signup -> AC/Non-AC chip row (18 total, 7 Non-AC, filter works), 5 featured badges visible on home, cabin detail shows type chip + Featured chip + avg_rating 4.0(1) + Reviews list; booking creates and appears on Bookings tab with Chat + Cancel buttons + AC type pill + CONFIRMED status; chat screen opens with auto-welcome message from owner, send works. Owner (demo.owner@cabinly.app) verified: My Cabins each with Boost button, Boost modal shows 'cabinly@upi' + Confirm Paid -> Featured badge appears on card + 'Boosted' pill on button; Add Cabin has segmented AC/Non-AC control (defaults AC), Non-AC choice persists in listing. No red screens, no page errors, no deprecated Expo packages, all interactive elements have testIDs. No functional bugs found.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "cabin/[id] Book modal (mobile 390x667)", "issues": ["Confirm-booking-button can fall below fold on shorter viewports; users must scroll inside modal. Consider ScrollView with sticky footer or shorter modal spacing."]},
+      {"screen": "index.tsx Boost sheet", "issues": ["Confirm-paid-button is outside the initial viewport at 390x844 with the QR image + address block; requires scrolling. Consider making the modal body scrollable or reducing QR size on small screens."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_cabinly_api.py",
+    "/app/backend/tests/test_iteration2_features.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional UX) Make Book-now and Boost modals scrollable so their primary CTA is always reachable on 390x667.",
+    "(Optional, from iter1) FastAPI on_event startup/shutdown is deprecated; migrate to lifespan handlers."
+  ],
+  "critical_code_review_comments": [
+    "server.py enrich_cabin recomputes stats via 1 aggregate per cabin per list call — fine at current scale, but consider a $lookup pipeline if the catalog grows.",
+    "server.py _cabin_is_featured tolerates both string and datetime featured_until values; good defensive parsing.",
+    "index.tsx: student sees type chip row unconditionally; owner sees My Cabins + Boost buttons. Clean separation via role gate.",
+    "bookings.tsx: 'Leave a review' button only rendered when can_review is true — matches backend contract exactly.",
+    "chat/[bookingId].tsx: 3s polling implemented; consider stopping the interval when the tab is blurred to save network."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration2_features.py (new)",
+    "/app/test_reports/pytest/pytest_results.xml (regenerated)"
+  ],
+  "success_rate": {"backend": "100% (34/34)", "frontend": "100% of new & regression flows exercised"},
+  "seed_data_creation": "Multiple TEST_ / it2_ prefixed users, cabins, bookings, and 1 review created via public API and one past-dated booking inserted via motor (test_success_path_past_date_via_mongo). All isolated from seeded demo owner data.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run: `pytest /app/backend/tests/ -v --junitxml=/app/test_reports/pytest/pytest_results.xml`. Uses EXPO_PUBLIC_BACKEND_URL from /app/frontend/.env. Notes: (1) EmailStr rejects .test TLD -> use .app; (2) tab-* and cabin-list testIDs render twice in Expo web (top+bottom bars) — use `.last` when clicking; (3) Book-now / Boost modal CTAs can fall below fold at 390x844, use dispatch_event('click') or evaluate() to bypass viewport check; (4) featured_until returned as ISO datetime string with tz; compare with datetime.fromisoformat(...replace('Z','+00:00')); (5) past-date review success path requires inserting the booking directly via motor to bypass frontend date-picker (past dates are not selectable) — pattern shown in test_iteration2_features.py::test_success_path_past_date_via_mongo.",
+  "rca_of_issue": "N/A — no bugs found. All new features (AC/Non-AC type + filter, mock UPI featured boost, past-date-only reviews with avg_rating rollup, per-booking chat with auto-welcome + participant-only access) function as specified in the review request."
+}

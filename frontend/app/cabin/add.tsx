@@ -46,6 +46,7 @@ export default function AddCabin() {
   const [description, setDescription] = useState("");
   const [image, setImage] = useState(DEFAULT_IMAGES[0]);
   const [amenities, setAmenities] = useState<string[]>([]);
+  const [type, setType] = useState<"AC" | "Non-AC">("AC");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -76,6 +77,7 @@ export default function AddCabin() {
           amenities,
           description,
           image_url: image,
+          type,
         },
       });
       router.replace("/(tabs)");
@@ -148,6 +150,31 @@ export default function AddCabin() {
               value={price}
               onChangeText={setPrice}
             />
+          </Field>
+
+          <Field label="Cabin type">
+            <View style={styles.typeRow}>
+              {(["AC", "Non-AC"] as const).map((t) => {
+                const active = t === type;
+                return (
+                  <Pressable
+                    key={t}
+                    testID={`add-cabin-type-${t}`}
+                    onPress={() => setType(t)}
+                    style={[styles.typeOpt, active && styles.typeOptActive]}
+                  >
+                    <Ionicons
+                      name={t === "AC" ? "snow" : "leaf"}
+                      size={18}
+                      color={active ? colors.onBrandPrimary : colors.onSurfaceSecondary}
+                    />
+                    <Text style={[styles.typeOptText, active && styles.typeOptTextActive]}>
+                      {t}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </Field>
 
           <Field label="Cover image">
@@ -270,6 +297,22 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   imageRow: { flexDirection: "row", gap: spacing.sm },
+  typeRow: { flexDirection: "row", gap: spacing.md },
+  typeOpt: {
+    flex: 1,
+    flexDirection: "row",
+    gap: spacing.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  typeOptActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  typeOptText: { color: colors.onSurfaceSecondary, fontWeight: "700" },
+  typeOptTextActive: { color: colors.onBrandPrimary },
   imageOpt: {
     flex: 1,
     height: 80,
